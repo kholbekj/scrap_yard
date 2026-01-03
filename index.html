@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scrap Yard</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "@drifting-ink/ledger": "https://esm.sh/@drifting-ink/ledger@0.2.0",
+        "@vlcn.io/crsqlite-wasm": "https://esm.sh/@vlcn.io/crsqlite-wasm@0.16.0"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <h1>Scrap Yard</h1>
+      <p class="tagline">P2P catalog for offline static sites</p>
+      <div class="header-actions">
+        <button id="add-site-btn" class="btn btn-primary">+ Add Site</button>
+        <span id="sync-status" class="sync-status">Offline</span>
+      </div>
+    </header>
+
+    <main class="main">
+      <div id="catalog" class="catalog">
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon">📦</div>
+          <h2>No sites yet</h2>
+          <p>Add your first site to start building your offline catalog</p>
+        </div>
+        <div id="sites-grid" class="sites-grid"></div>
+      </div>
+    </main>
+
+    <!-- Add Site Modal -->
+    <div id="add-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Add Site</h2>
+          <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <form id="add-site-form">
+          <div class="form-group">
+            <label for="site-folder">Site Folder</label>
+            <div class="drop-zone" id="drop-zone">
+              <input type="file" id="site-folder" webkitdirectory directory multiple hidden>
+              <p>Drop folder here or <button type="button" class="link-btn" id="browse-btn">browse</button></p>
+              <p class="drop-hint" id="drop-hint"></p>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="site-name">Name</label>
+            <input type="text" id="site-name" placeholder="My Site" required>
+          </div>
+          <div class="form-group">
+            <label for="site-description">Description (optional)</label>
+            <textarea id="site-description" placeholder="A brief description..." rows="3"></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" id="cancel-add">Cancel</button>
+            <button type="submit" class="btn btn-primary" id="submit-add" disabled>Add Site</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Site Detail Modal -->
+    <div id="detail-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h2 id="detail-name">Site Name</h2>
+          <button class="modal-close" id="detail-close">&times;</button>
+        </div>
+        <div class="detail-body">
+          <div class="detail-info">
+            <p id="detail-url" class="detail-url"></p>
+            <p id="detail-description" class="detail-description"></p>
+            <div class="detail-meta">
+              <span id="detail-cached-status"></span>
+              <span id="detail-added"></span>
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button id="detail-cache" class="btn btn-primary">Cache Site</button>
+            <button id="detail-browse" class="btn btn-secondary" disabled>Browse Offline</button>
+            <button id="detail-download" class="btn btn-secondary" disabled>Download ZIP</button>
+            <button id="detail-remove" class="btn btn-danger">Remove</button>
+          </div>
+          <div id="cache-progress" class="cache-progress hidden">
+            <div class="progress-bar">
+              <div class="progress-fill" id="progress-fill"></div>
+            </div>
+            <span class="progress-text" id="progress-text">0%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <template id="site-card-template">
+    <article class="site-card" data-site-id="">
+      <div class="site-thumbnail">
+        <div class="thumbnail-placeholder">🌐</div>
+      </div>
+      <div class="site-info">
+        <h3 class="site-name"></h3>
+        <p class="site-url"></p>
+        <div class="site-status">
+          <span class="cache-badge">Not cached</span>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

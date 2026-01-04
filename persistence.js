@@ -180,6 +180,18 @@ export async function isSiteCached(siteId) {
 }
 
 /**
+ * Copy all files from one site to another
+ * @param {string} fromSiteId - Source site ID
+ * @param {string} toSiteId - Destination site ID
+ */
+export async function copyFilesToSite(fromSiteId, toSiteId) {
+  const files = await getFilesForSite(fromSiteId);
+  for (const file of files) {
+    await storeFile(toSiteId, file.path, file.content, file.contentType);
+  }
+}
+
+/**
  * Format bytes to human readable string
  * @param {number} bytes
  * @returns {string}

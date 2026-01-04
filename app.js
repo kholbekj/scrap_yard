@@ -5,14 +5,19 @@
 
 import {
   initCatalog,
-  getAllSites,
+  getMySites,
+  getAvailableSites,
   getSite,
   addSite,
   removeSite,
-  setSiteCached,
+  updateSiteFileStats,
+  adoptSite,
   onCatalogChange,
+  onPeerChange,
   getSyncStatus,
-  isSyncAvailable
+  isSyncAvailable,
+  getNodeId,
+  getRoomToken
 } from './catalog.js';
 
 import {
@@ -20,9 +25,17 @@ import {
   storeFile,
   getFilesForSite,
   deleteFilesForSite,
-  isSiteCached as checkSiteCached,
+  copyFilesToSite,
   formatBytes
 } from './persistence.js';
+
+import {
+  initTransfer,
+  importSiteFromPeer,
+  getConnectedPeers,
+  isConnectedToPeer,
+  onTransferProgress
+} from './transfer.js';
 
 // DOM Elements
 const addSiteBtn = document.getElementById('add-site-btn');
@@ -30,10 +43,33 @@ const addModal = document.getElementById('add-modal');
 const addSiteForm = document.getElementById('add-site-form');
 const modalClose = document.getElementById('modal-close');
 const cancelAdd = document.getElementById('cancel-add');
-const sitesGrid = document.getElementById('sites-grid');
+const mySitesGrid = document.getElementById('my-sites-grid');
 const emptyState = document.getElementById('empty-state');
 const syncStatus = document.getElementById('sync-status');
 const siteCardTemplate = document.getElementById('site-card-template');
+
+// Peers section elements
+const peersSection = document.getElementById('peers-section');
+const peersList = document.getElementById('peers-list');
+const peerCardTemplate = document.getElementById('peer-card-template');
+
+// Available sites elements
+const availableSection = document.getElementById('available-section');
+const availableSitesGrid = document.getElementById('available-sites-grid');
+const availableSiteCardTemplate = document.getElementById('available-site-card-template');
+
+// Import modal elements
+const importModal = document.getElementById('import-modal');
+const importClose = document.getElementById('import-close');
+const importCancel = document.getElementById('import-cancel');
+const importConfirm = document.getElementById('import-confirm');
+const importName = document.getElementById('import-name');
+const importDescription = document.getElementById('import-description');
+const importFiles = document.getElementById('import-files');
+const importOwner = document.getElementById('import-owner');
+const importProgress = document.getElementById('import-progress');
+const importProgressFill = document.getElementById('import-progress-fill');
+const importProgressText = document.getElementById('import-progress-text');
 
 // Add modal elements
 const dropZone = document.getElementById('drop-zone');
@@ -61,6 +97,7 @@ const progressText = document.getElementById('progress-text');
 
 let currentSiteId = null;
 let pendingFiles = [];
+let currentImportSite = null;
 
 /**
  * Initialize the application
@@ -80,14 +117,21 @@ async function init() {
   await initDB();
   await initCatalog();
 
+  // Initialize file transfer system (uses Ledger's existing connections)
+  initTransfer();
+
   // Set up event listeners
   setupEventListeners();
 
   // Subscribe to catalog changes
   onCatalogChange(renderCatalog);
 
+  // Subscribe to peer changes
+  onPeerChange(renderPeers);
+
   // Initial render
   await renderCatalog();
+  renderPeers();
 
   // Update sync status periodically
   updateSyncStatus();
@@ -122,11 +166,18 @@ function setupEventListeners() {
   detailDownload.addEventListener('click', handleDownloadSite);
   detailRemove.addEventListener('click', handleRemoveSite);
 
+  // Import modal
+  importClose.addEventListener('click', closeImportModal);
+  importCancel.addEventListener('click', closeImportModal);
+  importModal.querySelector('.modal-backdrop').addEventListener('click', closeImportModal);
+  // Note: importConfirm click handler is set dynamically in openImportModal
+
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       closeAddModal();
       closeDetailModal();
+      closeImportModal();
     }
   });
 }
@@ -251,20 +302,29 @@ function setPendingFiles(files) {
  * Render the catalog grid
  */
 async function renderCatalog() {
-  const sites = await getAllSites();
+  // Render my sites
+  const mySites = await getMySites();
+  emptyState.classList.toggle('hidden', mySites.length > 0);
+  mySitesGrid.innerHTML = '';
 
-  // Update empty state visibility
-  emptyState.classList.toggle('hidden', sites.length > 0);
-  sitesGrid.innerHTML = '';
-
-  for (const site of sites) {
+  for (const site of mySites) {
     const card = createSiteCard(site);
-    sitesGrid.appendChild(card);
+    mySitesGrid.appendChild(card);
+  }
+
+  // Render available sites from peers
+  const availableSites = await getAvailableSites();
+  availableSection.classList.toggle('hidden', availableSites.length === 0);
+  availableSitesGrid.innerHTML = '';
+
+  for (const site of availableSites) {
+    const card = createAvailableSiteCard(site);
+    availableSitesGrid.appendChild(card);
   }
 }
 
 /**
- * Create a site card element
+ * Create a site card element (for my sites)
  */
 function createSiteCard(site) {
   const template = siteCardTemplate.content.cloneNode(true);
@@ -281,6 +341,144 @@ function createSiteCard(site) {
   card.addEventListener('click', () => openDetailModal(site.id));
 
   return card;
+}
+
+/**
+ * Create an available site card (for peer sites)
+ */
+function createAvailableSiteCard(site) {
+  const template = availableSiteCardTemplate.content.cloneNode(true);
+  const card = template.querySelector('.site-card');
+
+  card.dataset.siteId = site.id;
+  card.dataset.ownerId = site.owner_id;
+  card.querySelector('.site-name').textContent = site.name || 'Unnamed Site';
+  card.querySelector('.site-description').textContent = site.description || '';
+
+  // Show file count if available
+  const badge = card.querySelector('.cache-badge');
+  if (site.file_count) {
+    badge.textContent = `${site.file_count} files`;
+  }
+
+  // Show owner (shortened)
+  const ownerBadge = card.querySelector('.owner-badge');
+  ownerBadge.textContent = `from ${site.owner_id?.slice(0, 8) || 'unknown'}`;
+
+  card.addEventListener('click', () => openImportModal(site));
+
+  return card;
+}
+
+/**
+ * Render connected peers
+ */
+function renderPeers() {
+  const status = getSyncStatus();
+  const peers = status.peers || [];
+
+  peersSection.classList.toggle('hidden', peers.length === 0);
+
+  if (peers.length === 0) {
+    peersList.innerHTML = '<p class="no-peers">No peers connected</p>';
+    return;
+  }
+
+  peersList.innerHTML = '';
+  for (const peerId of peers) {
+    const template = peerCardTemplate.content.cloneNode(true);
+    const card = template.querySelector('.peer-card');
+    card.dataset.peerId = peerId;
+    card.querySelector('.peer-id').textContent = peerId.slice(0, 8) + '...';
+    peersList.appendChild(card);
+  }
+}
+
+/**
+ * Open import modal for a peer's site
+ */
+async function openImportModal(site) {
+  currentImportSite = site;
+
+  importName.textContent = site.name || 'Unnamed Site';
+  importDescription.textContent = site.description || 'No description';
+  importFiles.textContent = site.file_count ? `${site.file_count} files (${formatBytes(site.file_size || 0)})` : 'Unknown size';
+  importOwner.textContent = `Owner: ${site.owner_id?.slice(0, 8) || 'unknown'}`;
+
+  importProgress.classList.add('hidden');
+
+  // Check if files are already cached locally
+  const localFiles = await getFilesForSite(site.id);
+  if (localFiles.length > 0) {
+    importConfirm.textContent = 'Browse Offline';
+    importConfirm.onclick = () => {
+      window.open(`/local/${site.id}/`, '_blank');
+      closeImportModal();
+    };
+  } else {
+    importConfirm.textContent = 'Import Site';
+    importConfirm.onclick = handleImportSite;
+  }
+  importConfirm.disabled = false;
+
+  importModal.classList.remove('hidden');
+}
+
+/**
+ * Close import modal
+ */
+function closeImportModal() {
+  importModal.classList.add('hidden');
+  currentImportSite = null;
+}
+
+/**
+ * Handle importing a site from a peer
+ */
+async function handleImportSite() {
+  if (!currentImportSite) return;
+
+  const site = currentImportSite;
+  const ownerId = site.owner_id;
+
+  // Check if peer is connected
+  if (!isConnectedToPeer(ownerId)) {
+    alert('Owner peer is not connected. Cannot transfer files.');
+    return;
+  }
+
+  importConfirm.disabled = true;
+  importConfirm.textContent = 'Importing...';
+  importProgress.classList.remove('hidden');
+
+  try {
+    // Import files from peer via WebRTC (stored under original site ID temporarily)
+    await importSiteFromPeer(ownerId, site.id, (completed, total, path) => {
+      const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+      importProgressFill.style.width = `${percent}%`;
+      importProgressText.textContent = `${percent}% - ${path || 'Starting...'}`;
+    });
+
+    // Create our own copy of the site (new ID, our ownership)
+    const { newSite } = await adoptSite(site.id);
+
+    // Copy files from original site ID to our new site ID
+    await copyFilesToSite(site.id, newSite.id);
+
+    // Clean up files under original ID (we have our own copy now)
+    await deleteFilesForSite(site.id);
+
+    closeImportModal();
+    await renderCatalog();
+  } catch (error) {
+    console.error('Error importing site:', error);
+    alert(`Failed to import site: ${error.message}`);
+  } finally {
+    importConfirm.disabled = false;
+    importConfirm.textContent = 'Import Site';
+    importProgress.classList.add('hidden');
+    importProgressFill.style.width = '0%';
+  }
 }
 
 /**
@@ -325,17 +523,21 @@ async function handleAddSite(e) {
       thumbnail: ''
     });
 
-    // Store all files
+    // Store all files and track total size
     let stored = 0;
+    let totalSize = 0;
     for (const { path, file } of pendingFiles) {
       const content = await file.arrayBuffer().then(buf => new Blob([buf], { type: file.type }));
       const contentType = file.type || guessContentType(path);
       await storeFile(site.id, path, content, contentType);
       stored++;
+      totalSize += file.size;
       submitAdd.textContent = `Uploading... ${Math.round((stored / pendingFiles.length) * 100)}%`;
     }
 
-    await setSiteCached(site.id, true);
+    // Update file stats for P2P sharing
+    await updateSiteFileStats(site.id, pendingFiles.length, totalSize);
+
     closeAddModal();
     await renderCatalog();
   } catch (error) {
@@ -539,7 +741,8 @@ function updateSyncStatus() {
   if (isSyncAvailable()) {
     const status = getSyncStatus();
     if (status.connected) {
-      syncStatus.textContent = `Online (${status.peers} peer${status.peers !== 1 ? 's' : ''})`;
+      const peerCount = status.peers?.length || 0;
+      syncStatus.textContent = `Online (${peerCount} peer${peerCount !== 1 ? 's' : ''})`;
       syncStatus.classList.add('online');
     } else {
       syncStatus.textContent = 'Connecting...';

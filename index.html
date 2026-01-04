@@ -8,7 +8,7 @@
   <script type="importmap">
     {
       "imports": {
-        "@drifting-ink/ledger": "https://esm.sh/@drifting-ink/ledger@0.2.0",
+        "@drifting-ink/ledger": "./ledger.js",
         "@vlcn.io/crsqlite-wasm": "https://esm.sh/@vlcn.io/crsqlite-wasm@0.16.0"
       }
     }
@@ -26,14 +26,33 @@
     </header>
 
     <main class="main">
-      <div id="catalog" class="catalog">
-        <div class="empty-state" id="empty-state">
-          <div class="empty-icon">📦</div>
-          <h2>No sites yet</h2>
-          <p>Add your first site to start building your offline catalog</p>
+      <!-- My Sites Section -->
+      <section class="catalog-section">
+        <h2 class="section-title">My Sites</h2>
+        <div id="my-sites-catalog" class="catalog">
+          <div class="empty-state" id="empty-state">
+            <div class="empty-icon">📦</div>
+            <h2>No sites yet</h2>
+            <p>Add your first site to start building your offline catalog</p>
+          </div>
+          <div id="my-sites-grid" class="sites-grid"></div>
         </div>
-        <div id="sites-grid" class="sites-grid"></div>
-      </div>
+      </section>
+
+      <!-- Peers Section -->
+      <section id="peers-section" class="catalog-section peers-section hidden">
+        <h2 class="section-title">Connected Peers</h2>
+        <div id="peers-list" class="peers-list">
+          <p class="no-peers">No peers connected</p>
+        </div>
+      </section>
+
+      <!-- Available from Peers Section -->
+      <section id="available-section" class="catalog-section hidden">
+        <h2 class="section-title">Available from Peers</h2>
+        <p class="section-hint">Sites shared by peers - click to import</p>
+        <div id="available-sites-grid" class="sites-grid"></div>
+      </section>
     </main>
 
     <!-- Add Site Modal -->
@@ -103,6 +122,37 @@
     </div>
   </div>
 
+    <!-- Import Site Modal -->
+    <div id="import-modal" class="modal hidden">
+      <div class="modal-backdrop"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Import Site</h2>
+          <button class="modal-close" id="import-close">&times;</button>
+        </div>
+        <div class="detail-body">
+          <div class="detail-info">
+            <h3 id="import-name" class="import-name"></h3>
+            <p id="import-description" class="detail-description"></p>
+            <div class="detail-meta">
+              <span id="import-files"></span>
+              <span id="import-owner"></span>
+            </div>
+          </div>
+          <div id="import-progress" class="cache-progress hidden">
+            <div class="progress-bar">
+              <div class="progress-fill" id="import-progress-fill"></div>
+            </div>
+            <span class="progress-text" id="import-progress-text">0%</span>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" id="import-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="import-confirm">Import Site</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
   <template id="site-card-template">
     <article class="site-card" data-site-id="">
       <div class="site-thumbnail">
@@ -113,6 +163,30 @@
         <p class="site-url"></p>
         <div class="site-status">
           <span class="cache-badge">Not cached</span>
+        </div>
+      </div>
+    </article>
+  </template>
+
+  <template id="peer-card-template">
+    <div class="peer-card" data-peer-id="">
+      <span class="peer-icon">👤</span>
+      <span class="peer-id"></span>
+      <span class="peer-sites-count"></span>
+    </div>
+  </template>
+
+  <template id="available-site-card-template">
+    <article class="site-card available-site" data-site-id="" data-owner-id="">
+      <div class="site-thumbnail">
+        <div class="thumbnail-placeholder">📥</div>
+      </div>
+      <div class="site-info">
+        <h3 class="site-name"></h3>
+        <p class="site-description"></p>
+        <div class="site-status">
+          <span class="cache-badge available">Available</span>
+          <span class="owner-badge"></span>
         </div>
       </div>
     </article>

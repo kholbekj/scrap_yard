@@ -28,6 +28,10 @@ body {
   line-height: 1.5;
 }
 
+.hidden {
+  display: none !important;
+}
+
 #app {
   max-width: 1200px;
   margin: 0 auto;
@@ -432,6 +436,92 @@ form {
 .progress-text {
   font-size: 0.75rem;
   color: var(--text-secondary);
+}
+
+/* Catalog Sections */
+.catalog-section {
+  margin-bottom: 2.5rem;
+}
+
+.section-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.section-hint {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+/* Peers Section */
+.peers-section {
+  padding: 1rem;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+}
+
+.peers-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.no-peers {
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.peer-card {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius);
+  font-size: 0.875rem;
+}
+
+.peer-icon {
+  opacity: 0.7;
+}
+
+.peer-id {
+  font-family: monospace;
+  color: var(--text-secondary);
+}
+
+.peer-sites-count {
+  color: var(--accent);
+  font-size: 0.75rem;
+}
+
+/* Available Sites */
+.available-site {
+  border: 1px dashed var(--border);
+}
+
+.available-site:hover {
+  border-color: var(--accent);
+}
+
+.cache-badge.available {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent);
+}
+
+.owner-badge {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.import-name {
+  font-size: 1.125rem;
+  margin-bottom: 0.5rem;
 }
 
 /* Responsive */

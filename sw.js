@@ -3,7 +3,7 @@
  * Intercepts requests to /local/{siteId}/ and serves from IndexedDB
  */
 
-const CACHE_NAME = 'scrap-yard-v1';
+const CACHE_NAME = 'scrap-yard-v2';
 const DB_NAME = 'scrap_yard_content';
 const STORE_NAME = 'site_files';
 
@@ -197,12 +197,17 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // For app files, try cache first, then network
+  // For app files, try network first, fall back to cache
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(event.request).then((response) => {
-        return response || fetch(event.request);
-      })
+      fetch(event.request)
+        .then((response) => {
+          // Update cache with fresh response
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          return response;
+        })
+        .catch(() => caches.match(event.request))
     );
     return;
   }

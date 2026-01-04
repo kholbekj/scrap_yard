@@ -210,7 +210,7 @@ export async function getSite(id) {
 
 /**
  * Add a new site to the catalog (owned by me)
- * @param {Object} site - Site data {name, description?, fileCount?, fileSize?}
+ * @param {Object} site - Site data {name, description?, fileCount?, fileSize?, contentHash?}
  * @returns {Promise<Object>} The created site
  */
 export async function addSite(site) {
@@ -224,6 +224,7 @@ export async function addSite(site) {
     description: site.description || '',
     thumbnail: site.thumbnail || '',
     owner_id: ledger.getNodeId(),
+    content_hash: site.contentHash || '',
     file_count: site.fileCount || 0,
     file_size: site.fileSize || 0,
     added_at: now,
@@ -231,10 +232,10 @@ export async function addSite(site) {
   };
 
   await ledger.exec(
-    `INSERT INTO sites (id, name, url, description, thumbnail, owner_id, file_count, file_size, added_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO sites (id, name, url, description, thumbnail, owner_id, content_hash, file_count, file_size, added_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [newSite.id, newSite.name, newSite.url, newSite.description,
-     newSite.thumbnail, newSite.owner_id, newSite.file_count, newSite.file_size,
+     newSite.thumbnail, newSite.owner_id, newSite.content_hash, newSite.file_count, newSite.file_size,
      newSite.added_at, newSite.updated_at]
   );
 
@@ -259,9 +260,9 @@ export async function updateSite(id, updates) {
 
   await ledger.exec(
     `UPDATE sites SET name = ?, url = ?, description = ?, thumbnail = ?,
-     owner_id = ?, file_count = ?, file_size = ?, updated_at = ? WHERE id = ?`,
+     owner_id = ?, content_hash = ?, file_count = ?, file_size = ?, updated_at = ? WHERE id = ?`,
     [updated.name, updated.url, updated.description, updated.thumbnail,
-     updated.owner_id, updated.file_count, updated.file_size, updated.updated_at, id]
+     updated.owner_id, updated.content_hash || '', updated.file_count, updated.file_size, updated.updated_at, id]
   );
 
   notifyChange();
@@ -276,6 +277,22 @@ export async function updateSite(id, updates) {
  */
 export async function updateSiteFileStats(id, fileCount, fileSize) {
   return updateSite(id, { file_count: fileCount, file_size: fileSize });
+}
+
+/**
+ * Find a site I own with a specific content hash
+ * @param {string} contentHash
+ * @returns {Promise<Object|null>}
+ */
+export async function findMySiteByHash(contentHash) {
+  if (!ledger || !contentHash) return null;
+  const myId = ledger.getNodeId();
+  const result = await ledger.exec(
+    'SELECT * FROM sites WHERE owner_id = ? AND content_hash = ? LIMIT 1',
+    [myId, contentHash]
+  );
+  const sites = rowsToSites(result);
+  return sites[0] || null;
 }
 
 /**
@@ -295,6 +312,7 @@ export async function adoptSite(originalId) {
     url: original.url,
     description: original.description,
     thumbnail: original.thumbnail,
+    contentHash: original.content_hash,
     fileCount: original.file_count,
     fileSize: original.file_size
   });
@@ -376,5 +394,17 @@ export function disconnect() {
   if (ledger) {
     ledger.disconnect();
   }
+}
+
+/**
+ * Debug: dump raw sites table
+ */
+export async function dumpSites() {
+  if (!ledger) return console.log('No ledger');
+  const result = await ledger.exec('SELECT * FROM sites');
+  console.log('My node:', ledger.getNodeId());
+  console.log('Columns:', result.columns);
+  console.log('Rows:', result.rows);
+  return result;
 }
 

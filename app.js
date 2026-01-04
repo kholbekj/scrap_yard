@@ -10,15 +10,20 @@ import {
   getSite,
   addSite,
   removeSite,
-  updateSiteFileStats,
+  updateSite,
   adoptSite,
+  findMySiteByHash,
   onCatalogChange,
   onPeerChange,
   getSyncStatus,
   isSyncAvailable,
   getNodeId,
-  getRoomToken
+  getRoomToken,
+  dumpSites
 } from './catalog.js';
+
+// Expose debug function
+window.dumpSites = dumpSites;
 
 import {
   initDB,
@@ -26,6 +31,7 @@ import {
   getFilesForSite,
   deleteFilesForSite,
   copyFilesToSite,
+  computeContentHash,
   formatBytes
 } from './persistence.js';
 
@@ -312,12 +318,15 @@ async function renderCatalog() {
     mySitesGrid.appendChild(card);
   }
 
-  // Render available sites from peers
+  // Render available sites from peers (excluding ones we already have)
   const availableSites = await getAvailableSites();
-  availableSection.classList.toggle('hidden', availableSites.length === 0);
+  const myHashes = new Set(mySites.map(s => s.content_hash).filter(Boolean));
+  const newSites = availableSites.filter(s => !s.content_hash || !myHashes.has(s.content_hash));
+
+  availableSection.classList.toggle('hidden', newSites.length === 0);
   availableSitesGrid.innerHTML = '';
 
-  for (const site of availableSites) {
+  for (const site of newSites) {
     const card = createAvailableSiteCard(site);
     availableSitesGrid.appendChild(card);
   }
@@ -407,12 +416,12 @@ async function openImportModal(site) {
 
   importProgress.classList.add('hidden');
 
-  // Check if files are already cached locally
-  const localFiles = await getFilesForSite(site.id);
-  if (localFiles.length > 0) {
-    importConfirm.textContent = 'Browse Offline';
+  // Check if we already have this exact content (by hash)
+  const existingSite = site.content_hash ? await findMySiteByHash(site.content_hash) : null;
+  if (existingSite) {
+    importConfirm.textContent = 'Already Have It';
     importConfirm.onclick = () => {
-      window.open(`/local/${site.id}/`, '_blank');
+      window.open(`/local/${existingSite.id}/`, '_blank');
       closeImportModal();
     };
   } else {
@@ -464,6 +473,12 @@ async function handleImportSite() {
 
     // Copy files from original site ID to our new site ID
     await copyFilesToSite(site.id, newSite.id);
+
+    // If original didn't have a content hash, compute it now
+    if (!newSite.content_hash) {
+      const contentHash = await computeContentHash(newSite.id);
+      await updateSite(newSite.id, { content_hash: contentHash });
+    }
 
     // Clean up files under original ID (we have our own copy now)
     await deleteFilesForSite(site.id);
@@ -535,8 +550,13 @@ async function handleAddSite(e) {
       submitAdd.textContent = `Uploading... ${Math.round((stored / pendingFiles.length) * 100)}%`;
     }
 
-    // Update file stats for P2P sharing
-    await updateSiteFileStats(site.id, pendingFiles.length, totalSize);
+    // Compute content hash and update site metadata for P2P sharing
+    const contentHash = await computeContentHash(site.id);
+    await updateSite(site.id, {
+      file_count: pendingFiles.length,
+      file_size: totalSize,
+      content_hash: contentHash
+    });
 
     closeAddModal();
     await renderCatalog();

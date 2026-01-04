@@ -203,3 +203,30 @@ export function formatBytes(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
+
+/**
+ * Compute a content hash for a site's files
+ * Hash is based on sorted file paths + sizes (fast) or full content (thorough)
+ * @param {string} siteId - The site ID
+ * @returns {Promise<string>} Hex hash string
+ */
+export async function computeContentHash(siteId) {
+  const files = await getFilesForSite(siteId);
+  if (files.length === 0) return '';
+
+  // Sort files by path for deterministic ordering
+  files.sort((a, b) => a.path.localeCompare(b.path));
+
+  // Build a manifest: path + size for each file
+  // This is fast and catches most changes without reading all content
+  const manifest = files.map(f => `${f.path}:${f.size}`).join('\n');
+
+  // Hash the manifest using SubtleCrypto
+  const encoder = new TextEncoder();
+  const data = encoder.encode(manifest);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+
+  // Convert to hex string
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
